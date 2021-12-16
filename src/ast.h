@@ -4,6 +4,7 @@
 #include <list>
 #include <string>
 #include "code.h"
+#include <map>
 
 using namespace std;
 

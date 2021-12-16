@@ -4,7 +4,7 @@
 #include <set>
 #include "asm.h"
 
-const char * floatTemps[] = {"$f0",
+const char *floatTemps[] = {"$f0",
                             "$f1",
                             "$f2",
                             "$f3",
@@ -35,20 +35,20 @@ const char * floatTemps[] = {"$f0",
                             "$f28",
                             "$f29",
                             "$f30",
-                            "$f31"
-                        };
+                            "$f31"};
 
 #define FLOAT_TEMP_COUNT 32
 set<string> intTempMap;
 set<string> floatTempMap;
-int labelCounter=0;
+int labelCounter = 0;
 extern Asm assemblyFile;
 
-
+map<string, int> codeGenerationVars;
 
 int globalStackPointer = 0;
 
-void releaseFloatTemp(string temp){
+void releaseFloatTemp(string temp)
+{
     floatTempMap.erase(temp);
 }
 
@@ -56,7 +56,6 @@ void releaseRegister(string temp)
 {
     releaseFloatTemp(temp);
 }
-
 
 string getNewLabel(string prefix)
 {
@@ -66,36 +65,40 @@ string getNewLabel(string prefix)
     return ss.str();
 }
 
-string saveState(){
-    set<string>::iterator it= floatTempMap.begin();
+string saveState()
+{
     stringstream ss;
-    ss<<"sw $ra, " << globalStackPointer << "($sp)" << endl;
-    globalStackPointer+=4;
+    ss << "sw $ra, " << globalStackPointer << "($sp)" << endl;
+    globalStackPointer += 4;
     return ss.str();
 }
 
-string retrieveState(string state){
-    std::string::size_type n=0;
-    string s="sw";
-    while((n=state.find(s,n))!=std::string::npos){
-        state.replace(n,s.size(),"lw");
-        n+=2;
-        globalStackPointer-=4;
+string retrieveState(string state)
+{
+
+    std::string::size_type n = 0;
+    string s = "sw";
+    while ((n = state.find(s, n)) != std::string::npos)
+    {
+        state.replace(n, s.size(), "lw");
+        n += 2;
+        globalStackPointer -= 4;
     }
     return state;
 }
 
-string getFloatTemp(){
-            cout<<"Hola getfloattemp";
+string getFloatTemp()
+{
 
     for (int i = 0; i < FLOAT_TEMP_COUNT; i++)
     {
-        if(floatTempMap.find(floatTemps[i]) == floatTempMap.end()){
+        if (floatTempMap.find(floatTemps[i]) == floatTempMap.end())
+        {
             floatTempMap.insert(floatTemps[i]);
             return string(floatTemps[i]);
         }
     }
-    cout<<"No more float registers!"<<endl;
+    cout << "No more float registers!" << endl;
     return "";
 }
 
@@ -117,7 +120,8 @@ string Arithmetic(Code &leftCode, Code &rightCode, Code &code, char op)
     return ss.str();
 }
 
-void FloatExpr::genCode(Code &code){
+void FloatExpr::genCode(Code &code)
+{
     string floatTemp = getFloatTemp();
     code.place = floatTemp;
     stringstream ss;
@@ -125,87 +129,86 @@ void FloatExpr::genCode(Code &code){
     code.code = ss.str();
 }
 
-void SubExpr::genCode(Code &code){
-     Code leftCode, rightCode;
-    stringstream ss;
-    this->expr1->genCode(leftCode);
-    this->expr2->genCode(rightCode);
-        releaseRegister(leftCode.place);
-        releaseRegister(rightCode.place);
-        ss << leftCode.code << endl
-        << rightCode.code <<endl
-        << Arithmetic(leftCode, rightCode, code, '-')<<endl;
-    code.code = ss.str();
-}
-
-
-void DivExpr::genCode(Code &code){
+void SubExpr::genCode(Code &code)
+{
     Code leftCode, rightCode;
     stringstream ss;
     this->expr1->genCode(leftCode);
     this->expr2->genCode(rightCode);
-        releaseRegister(leftCode.place);
-        releaseRegister(rightCode.place);
-        ss << leftCode.code << endl
-        << rightCode.code <<endl
-        << Arithmetic(leftCode, rightCode, code, '/')<<endl;
+    releaseRegister(leftCode.place);
+    releaseRegister(rightCode.place);
+    ss << leftCode.code << endl
+       << rightCode.code << endl
+       << Arithmetic(leftCode, rightCode, code, '-') << endl;
     code.code = ss.str();
 }
 
-
-
-void IdExpr::genCode(Code &code){
-                cout<<"Hola idexp";
-
+void DivExpr::genCode(Code &code)
+{
+    Code leftCode, rightCode;
     stringstream ss;
-    code.place = this->id;
-    ss << "l.s " << code.place << ", " << this->id << "($sp)" << endl;
+    this->expr1->genCode(leftCode);
+    this->expr2->genCode(rightCode);
+    releaseRegister(leftCode.place);
+    releaseRegister(rightCode.place);
+    ss << leftCode.code << endl
+       << rightCode.code << endl
+       << Arithmetic(leftCode, rightCode, code, '/') << endl;
     code.code = ss.str();
 }
 
-string ExprStatement::genCode(){
-            cout<<"Hola expr";
+void IdExpr::genCode(Code &code)
+{
+    stringstream ss;
+    string floatTemp = getFloatTemp();
+    code.place = floatTemp;
+    ss << "l.s " << floatTemp << ", " << codeGenerationVars[this->id] << "($sp)" << endl;
+    code.code = ss.str();
+}
 
+string ExprStatement::genCode()
+{
     Code exprCode;
     this->expr->genCode(exprCode);
     releaseFloatTemp(exprCode.place);
     return exprCode.code;
 }
 
-
-string IfStatement::genCode(){
+string IfStatement::genCode()
+{
     string endIfLabel = getNewLabel("endif");
     Code exprCode;
     this->conditionalExpr->genCode(exprCode);
     stringstream code;
     code << exprCode.code << endl;
-    code << "bc1f "<< endIfLabel <<endl;
+    code << "bc1f " << endIfLabel << endl;
     list<Statement *>::iterator itd = this->trueStatement.begin();
     while (itd != this->trueStatement.end())
     {
-        Statement * stmt = *itd;
-        if(stmt != NULL){
-            code<< stmt->genCode()<<endl;
+        Statement *stmt = *itd;
+        if (stmt != NULL)
+        {
+            code << stmt->genCode() << endl;
         }
         itd++;
     }
     list<Statement *>::iterator iterator = this->falseStatement.begin();
     while (iterator != this->falseStatement.end())
     {
-        Statement * stmt = *iterator;
-        if(stmt != NULL){
-            code<< stmt->genCode()<<endl;
+        Statement *stmt = *iterator;
+        if (stmt != NULL)
+        {
+            code << stmt->genCode() << endl;
         }
         iterator++;
     }
-    code<< endIfLabel <<" :"<< endl;
+    code << endIfLabel << " :" << endl;
     releaseFloatTemp(exprCode.place);
     return code.str();
-
 }
 
-void MethodInvocationExpr::genCode(Code &code){/////falta
-        cout<<"Hola method invocation";
+void MethodInvocationExpr::genCode(Code &code)
+{ /////falta
 
     list<Expr *>::iterator it = this->expressions.begin();
     list<Code> codes;
@@ -235,146 +238,158 @@ void MethodInvocationExpr::genCode(Code &code){/////falta
     code.place = reg;
 }
 
-string AssignationStatement::genCode(){
-        cout<<"Hola asignation";
+string AssignationStatement::genCode()
+{
 
     Code rightSideCode;
     Code exprCode;
     stringstream ss;
     this->value->genCode(rightSideCode);
-    ss<< rightSideCode.code <<endl;
+    ss << rightSideCode.code << endl;
     string name = this->id;
     list<Expr *>::iterator it = this->expressions.begin();
     while (it != this->expressions.end())
     {
         (*it)->genCode(exprCode);
-        ss << exprCode.code <<endl;
+        ss << exprCode.code << endl;
         releaseFloatTemp(exprCode.place);
         it++;
     }
-    if(name != ""){
-        if(floatTempMap.find(name) == floatTempMap.end()){
-            ss << "s.s "<<rightSideCode.place << ", "<<name <<endl;
-        }
+    if (name != "")
+    {
+        codeGenerationVars[name]=globalStackPointer;
+        ss << "s.s " << rightSideCode.place << ", " << codeGenerationVars[name] << "($sp)" << endl;
+        globalStackPointer+=4;
+        releaseRegister(rightSideCode.place);
+      
     }
     releaseFloatTemp(rightSideCode.place);
     return ss.str();
 }
 
-void GteExpr::genCode(Code &code){
-    cout<<"Hola gte";
+void GteExpr::genCode(Code &code)
+{
 
-    Code leftSideCode; 
+    Code leftSideCode;
     Code rightSideCode;
     stringstream ss;
     this->expr1->genCode(leftSideCode);
     this->expr2->genCode(rightSideCode);
-    ss << leftSideCode.code <<endl<< rightSideCode.code<<endl;
+    ss << leftSideCode.code << endl
+       << rightSideCode.code << endl;
     releaseFloatTemp(leftSideCode.place);
     releaseFloatTemp(rightSideCode.place);
-    ss<< "c.le.s "<< rightSideCode.place<< ", "<< leftSideCode.place<<endl;
+    ss << "c.le.s " << rightSideCode.place << ", " << leftSideCode.place << endl;
     code.code = ss.str();
 }
 
-void LteExpr::genCode(Code &code){
-cout<<"Hola lte";
+void LteExpr::genCode(Code &code)
+{
 
-    Code leftSideCode; 
+    Code leftSideCode;
     Code rightSideCode;
     stringstream ss;
     this->expr1->genCode(leftSideCode);
     this->expr2->genCode(rightSideCode);
-    ss << leftSideCode.code <<endl<< rightSideCode.code<<endl;
+    ss << leftSideCode.code << endl
+       << rightSideCode.code << endl;
     releaseFloatTemp(leftSideCode.place);
     releaseFloatTemp(rightSideCode.place);
-    ss<< "c.lt.s "<< rightSideCode.place<< ", "<< leftSideCode.place<<endl;
-    code.code = ss.str();          
-}
-
-void EqExpr::genCode(Code &code){
-                            cout<<"Hola eq";
-
-    Code leftSideCode; 
-    Code rightSideCode;
-    stringstream ss;
-    this->expr1->genCode(leftSideCode);
-    this->expr2->genCode(rightSideCode);
-    ss << leftSideCode.code <<endl<< rightSideCode.code<<endl;
-    releaseFloatTemp(leftSideCode.place);
-    releaseFloatTemp(rightSideCode.place);
-    ss<< "c.eq.s "<< rightSideCode.place<< ", "<< leftSideCode.place<<endl;
+    ss << "c.lt.s " << rightSideCode.place << ", " << leftSideCode.place << endl;
     code.code = ss.str();
 }
 
-void ReadFloatExpr::genCode(Code &code){
-    cout<<"Hola readfloat";
+void EqExpr::genCode(Code &code)
+{
 
-   // this->genCode(code);
+    Code leftSideCode;
+    Code rightSideCode;
+    stringstream ss;
+    this->expr1->genCode(leftSideCode);
+    this->expr2->genCode(rightSideCode);
+    ss << leftSideCode.code << endl
+       << rightSideCode.code << endl;
+    releaseFloatTemp(leftSideCode.place);
+    releaseFloatTemp(rightSideCode.place);
+    ss << "c.eq.s " << rightSideCode.place << ", " << leftSideCode.place << endl;
+    code.code = ss.str();
 }
 
-string PrintStatement::genCode(){
-                    cout<<"Hola print";
+void ReadFloatExpr::genCode(Code &code)
+{
+    // this->genCode(code);
+}
 
-    Code exprCode;
+string PrintStatement::genCode()
+{
+  Code exprCode;
     list<Expr *>::iterator it = this->expressions.begin();
     stringstream ss;
+    stringstream asciiLabel;
+    string label = getNewLabel("string");
+    asciiLabel << label <<": .asciiz" << this->id << ""<<endl;
+    assemblyFile.data += asciiLabel.str();
     while (it != this->expressions.end())
-    {
+    {   
         (*it)->genCode(exprCode);
-        ss << exprCode.code <<endl;
+        ss << exprCode.code << endl;
         releaseFloatTemp(exprCode.place);
         it++;
     }
-    ss << "li $v0, 1" << endl;
+    ss << "la $a0, " << label << endl;
+    ss << "li $v0, 4" << endl;
     ss << "syscall" << endl;
-    return ss.str();    
+    return ss.str();
 }
 
-string ReturnStatement::genCode(){
-                cout<<"Hola return";
 
+
+string ReturnStatement::genCode()
+{
     Code exprCode;
     this->expr->genCode(exprCode);
-
-        releaseRegister(exprCode.place);
+    releaseRegister(exprCode.place);
     stringstream ss;
     ss << exprCode.code << endl
        << "move $v0, " << exprCode.place << endl;
     return ss.str();
 }
 
-string MethodDefinitionStatement::genCode(){ 
-    cout<<"Hola method";
-    if(this->stmts.size() == 0)
+string MethodDefinitionStatement::genCode()
+{
+    if (this->stmts.size() == 0)
         return "";
     int stackPointer = 4;
     globalStackPointer = 0;
     stringstream code;
-    code << this->id<<": "<<endl;
+    code << this->id << ": " << endl;
     string state = saveState();
-    code <<state<<endl;
-    if(this->params.size() > 0){
-        list<string >::iterator it = this->params.begin();
-        for(int i = 0; i< this->params.size(); i++){
-            code << "sw $a"<<i<<", "<< stackPointer<<"($sp)"<<endl;
-            stackPointer +=4;
-            globalStackPointer +=4;
+    code << state << endl;
+    if (this->params.size() > 0)
+    {
+        list<string>::iterator it = this->params.begin();
+        for (int i = 0; i < this->params.size(); i++)
+        {
+            code << "sw $a" << i << ", " << stackPointer << "($sp)" << endl;
+            codeGenerationVars[(*it)] = stackPointer;
+            stackPointer += 4;
+            globalStackPointer += 4;
             it++;
         }
     }
-    cout<<"Hola2";
     list<Statement *>::iterator stmt = this->stmts.begin();
     while (stmt != stmts.end())
     {
-        (*stmt)->genCode();
-        (*stmt)++;
+        code << (*stmt)->genCode() << endl;
+        stmt++;
     }
     stringstream sp;
     int currentStackPointer = globalStackPointer;
-    sp << endl<<"addiu $sp, $sp, -"<<currentStackPointer<<endl;
+    sp << endl
+       << "addiu $sp, $sp, -" << currentStackPointer << endl;
     code << retrieveState(state);
-    code << "addiu $sp, $sp, "<<currentStackPointer<<endl;
-    code <<"jr $ra"<<endl;
+    code << "addiu $sp, $sp, " << currentStackPointer << endl;
+    code << "jr $ra" << endl;
     floatTempMap.clear();
     string result = code.str();
     result.insert(id.size() + 2, sp.str());
